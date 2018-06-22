@@ -1,95 +1,92 @@
-
 import re
 import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup
 import urllib.request
 import random
-    
-#soup = BeautifulSoup(urllib.request.urlopen('http://lyricsera.com/queen-lyrics.html').read(), "lxml")
-#print(soup.prettify())
+from typing import Dict
 
-def text_job(song_text):
-    song_text = re.sub(r"[=,.!?()\"]"," ",song_text)
-    song_text = re.sub(r"<[a-z/]+>"," ",song_text)
-    song_text = re.sub(r"\s+"," ",song_text)
-    song_text=song_text.replace("chorus"," ").replace(" ' "," ")
-    return song_text
+artists=['Paul Mccartney','Rod Stewart','Johnny Cash','Ray Charles']
 
-songs_queen = pd.DataFrame(columns=["title", "lyrics"])
-songs_jayz  = pd.DataFrame(columns=["title", "lyrics"])
+def extract_links(soup):
+        links = []
+        for link in soup.find_all('a'):
+            try:
+                if re.search(r"/[0-9]",link.get('href')):
+                    links.append(link)
+            except Exception as e:
+                print(e.args + ('failed for {link}'.format(link=link),))
+        return links
 
-for k in range(0,4):
-#linki do piosenek
-    print(k)
-    soup_queen = BeautifulSoup(urllib.request.urlopen('http://lyricsera.com/queen-p'+ str(k) +'-lyrics.html').read(), "lxml")
-    soup_jayz  = BeautifulSoup(urllib.request.urlopen('http://lyricsera.com/jay-z-p'+ str(k) +'-lyrics.html').read(), "lxml")
-    linki_queen = [link for link in soup_queen.find_all('a') if re.search(r"/[0-9]",link.get('href'))]
-    linki_jayz  = [link for link in  soup_jayz.find_all('a') if re.search(r"/[0-9]",link.get('href'))]
+def preprocess_lyrics(lyrics):
+    try:
+        song_text = re.sub(r"[=,.!?()\"]", " ", lyrics)
+        song_text = re.sub(r"<[a-z/]+>", " ", song_text)
+        song_text = re.sub(r"\s+", " ", song_text)
+        song_text = song_text.replace("chorus", " ").replace(" ' "," ")
+        return song_text
+    except Exception as e:
+        print(e.args + ('preprocessing failed.',))
+        return lyrics    
+
+songs = dict(title=[], lyrics=[])
+
+for artist in artists:
+    print(artist)
+    art = artist.lower().replace(" ","-")
     
-#teksty do dataframe    
-    for link in linki_queen:
-        soup_song = BeautifulSoup(urllib.request.urlopen(link.get('href')).read(), "lxml")
-        song_text = str(soup_song.tt).lower() 
-        song_text = text_job(song_text)
-        songs_queen = pd.DataFrame(np.insert(songs_queen.values, 0, values=[link.get('title'),song_text], axis=0), columns=["title", "lyrics"])
-    
-    for link in linki_jayz:
-        soup_song = BeautifulSoup(urllib.request.urlopen(link.get('href')).read(), "lxml")
-        song_text = str(soup_song.tt).lower() 
-        song_text = text_job(song_text)
-        songs_jayz = pd.DataFrame(np.insert(songs_queen.values, 0, values=[link.get('title'),song_text], axis=0), columns=["title", "lyrics"])
-    
+    for page in range(1,5):
+        print("Page: {page}".format(page=page))
+        url = 'http://lyricsera.com/{art}-p{page}-lyrics.html'.format(art = art,page=page)
+        request = urllib.request.urlopen(url)
+        soup = BeautifulSoup(request, 'lxml')
+        for link in extract_links(soup):
+            request_link = urllib.request.urlopen(link.get('href'))
+            soup_link = BeautifulSoup(request_link.read(), 'lxml')
+            song_text = preprocess_lyrics(str(soup_link.tt).lower())
+            songs['title'].append(link.get('title'))
+            songs['lyrics'].append(song_text)
       
-#modele
+           
+class choir(object):
 
-model_queen = {}
-for i in range(len(songs_queen['title'])):
-    song_words =  songs_queen.iloc[i,1].split()
+    def __init__(self, n: int = 1):
 
-    for j in range(len(song_words)-1):
-        word = song_words[j:j+1][0]
-        if word not in model_queen.keys():
-            model_queen[word] = []
-        model_queen[word].append(song_words[j+1])
+        self.n = n
+        count = 1.0
+        words, words_model = list(), dict()
+        for lyrics in songs['lyrics']:
+            words.extend(lyrics.split())
+            for i in range(len(words)-n):
+                song_part = ' '.join(words[i:i+n])
+                if song_part not in words_model.keys():
+                    words_model[song_part]=[]
+                words_model[song_part].append(words[i+n])
+            if round(100*count/len(songs['lyrics']))>round(100*(count-1)/len(songs['lyrics'])):
+                print(round(100*count/len(songs['lyrics'])), '% done')
+            count += 1
+        
+        self.model = words_model
 
-model_jayz = {}
-for i in range(len(songs_jayz['title'])):
-    song_words =  songs_jayz.iloc[i,1].split()
-
-    for j in range(len(song_words)-1):
-        word = song_words[j:j+1][0]
-        if word not in model_jayz.keys():
-            model_jayz[word] = []
-        model_jayz[word].append(song_words[j+1])        
-
-     
-def sing_a_song(start_improv, song_length):
-    start = start_improv
-    result= start
-    for i in range(song_length):
-        if start not in model_queen.keys():
-            break
-        possibilities = model_queen[start]
-        nextItem = possibilities[random.randrange(len(possibilities))]
-        result = result +' ' + nextItem
-        start =  nextItem
-    res_queen = result
+    def sing_song(self, song_start: str, steps: int):
+       
+        assert song_start in self.model.keys()
     
-    start = start_improv
-    result = start
-    for i in range(song_length):
-        if start not in model_jayz.keys():
-            break
-        possibilities = model_jayz[start]
-        nextItem = possibilities[random.randrange(len(possibilities))]
-        result = result +' ' + nextItem
-        start =  nextItem  
-    res_jayz = result
-    print(res_queen)
-    print(res_jayz)
-    return
+        song = list()
+        words = song_start
+        song.append(words)
+        for _ in range(steps):
+            possibilities = self.model[words]
+            next_item = possibilities[random.randrange(len(possibilities))]
+            song.append(next_item)
+            words = ' '.join(song[-self.n:])
+        return ' '.join(song)
 
 
+model_1 = choir()
+model_2 = choir(2)
+model_3 = choir(3)
 
-sing_a_song("drink", 20)
+model_1.sing_song("you", 30)
+model_2.sing_song("you myyy", 30)
+model_1.sing_song("you are my", 30)
