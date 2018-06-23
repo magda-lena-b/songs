@@ -5,8 +5,6 @@ import urllib.request
 import random
 
 
-artists=['Paul Mccartney','Rod Stewart','Johnny Cash','Ray Charles']
-
 class choir():
     
     def __init__(self):
@@ -20,7 +18,7 @@ class choir():
         for artist in artists:
             print(artist)
             
-            for page in range(1,pages):
+            for page in range(1,pages+1):
                 print("Page: {page}".format(page=page))
                 url = 'http://lyricsera.com/{art}-p{page}-lyrics.html'.format(art = artist.lower().replace(" ","-"),page=page)
                 request = urllib.request.urlopen(url)
